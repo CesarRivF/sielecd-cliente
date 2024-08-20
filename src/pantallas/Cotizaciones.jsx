@@ -19,6 +19,7 @@ import { modals } from "@mantine/modals";
 import MenuProducto from "../modales/MenuProducto";
 import { Cotizacion } from "../servicios/cotizaciones";
 import { notifications } from "@mantine/notifications";
+import { BASE_URL } from "../servicios/config";
 
 const clienteVacio = {
   id: null,
@@ -279,8 +280,7 @@ export default function Cotizaciones() {
           <Button
             onClick={() =>
               window.open(
-                "http://localhost:4000/api/cotizaciones/descargar/" +
-                  cotizacion.id,
+                BASE_URL + "/api/cotizaciones/descargar/" + cotizacion.id,
                 "_blank"
               )
             }

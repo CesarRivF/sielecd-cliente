@@ -2,6 +2,7 @@ import { Button, Container, Flex, Stack, Table, Title } from "@mantine/core";
 import { useEffect, useState } from "react";
 import { Cotizacion } from "../servicios/cotizaciones";
 import { notifications } from "@mantine/notifications";
+import { BASE_URL } from "../servicios/config";
 const cotizacionVacia = {
   id: null,
 };
@@ -65,7 +66,8 @@ export default function Historial() {
           <Button
             onClick={() =>
               window.open(
-                "http://localhost:4000/api/cotizaciones/descargar/" +
+                BASE_URL +
+                  "/api/cotizaciones/descargar/" +
                   cotizacionSeleccionada.id,
                 "_blank"
               )
