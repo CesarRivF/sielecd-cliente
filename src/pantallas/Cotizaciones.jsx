@@ -8,6 +8,7 @@ import {
   Stack,
   Table,
   Text,
+  TextInput,
   Title,
 } from "@mantine/core";
 import { useEffect, useState } from "react";
@@ -20,6 +21,7 @@ import MenuProducto from "../modales/MenuProducto";
 import { Cotizacion } from "../servicios/cotizaciones";
 import { notifications } from "@mantine/notifications";
 import { BASE_URL } from "../servicios/config";
+import { useForm } from "@mantine/form";
 
 const clienteVacio = {
   id: null,
@@ -47,14 +49,25 @@ export default function Cotizaciones() {
 
   const [productosAgregados, setProductosAgregados] = useState([]);
   const [cotizacion, setCotizacion] = useState(cotizacionVacia);
+  const [refreshClientes, setRefreshClientes] = useState(false);
+  const [refreshProductos, setRefreshProductos] = useState(false);
 
   useEffect(() => {
-    Producto.obtenerProductos().then((result) => setProductos(result.data));
-    Cliente.obtenerCliente().then((result) => setClientes(result.data));
     Cotizacion.obtenerUltimoFolio().then((result) =>
       setFolio(result.data.ultimoFolio + 1)
     );
   }, []);
+
+  useEffect(() => {
+    Cliente.obtenerCliente().then((result) => setClientes(result.data));
+    setRefreshClientes(false);
+  }, [refreshClientes]);
+
+  useEffect(() => {
+    Producto.obtenerProductos().then((result) => setProductos(result.data));
+    setRefreshProductos(false);
+  }, [refreshProductos]);
+
   const seleccionarCliente = (key) => {
     if (key === "Enter") {
       const clienteEncontrado = clientes.find(
@@ -84,12 +97,28 @@ export default function Cotizaciones() {
         (producto) => producto.descripcion === valorProducto
       );
       if (productoEncontrado) {
-        productoEncontrado.cantidad = valorCantidad;
-        productoEncontrado.importe =
-          valorCantidad * productoEncontrado.precio_unitario;
-        setProductosAgregados(
-          productosAgregados.concat(Array(productoEncontrado))
-        );
+        if (productosAgregados.find((x) => x.id === productoEncontrado.id)) {
+          const productosActualizados = productosAgregados.map((product) =>
+            product.id === productoEncontrado.id
+              ? {
+                  ...product,
+                  cantidad: product.cantidad + valorCantidad,
+                  importe:
+                    (product.cantidad + valorCantidad) *
+                    productoEncontrado.precio_unitario,
+                }
+              : product
+          );
+          setProductosAgregados(productosActualizados);
+        } else {
+          setProductosAgregados(
+            productosAgregados.concat({
+              ...productoEncontrado,
+              cantidad: valorCantidad,
+              importe: valorCantidad * productoEncontrado.precio_unitario,
+            })
+          );
+        }
         setValorCantidad(1);
         setValorProducto("");
       } else {
@@ -107,26 +136,151 @@ export default function Cotizaciones() {
     }
   };
 
-  const renglones = productosAgregados.map((producto) => (
+  const formCambiarCantidad = useForm({
+    mode: "uncontrolled",
+    initialValues: {
+      nuevaCantidad: 1,
+    },
+  });
+
+  const cambiarCantidad = (index, producto) =>
+    modals.open({
+      centered: true,
+      title: "Actualizar cantidad ",
+      children: (
+        <>
+          <form
+            onSubmit={formCambiarCantidad.onSubmit((values) => {
+              productosAgregados[index].cantidad = values.nuevaCantidad;
+              productosAgregados[index].importe =
+                values.nuevaCantidad *
+                productosAgregados[index].precio_unitario;
+              setProductosAgregados([...productosAgregados]);
+              formCambiarCantidad.reset();
+            })}
+          >
+            <NumberInput
+              placeholder="Ingresa la nueva cantidad"
+              allowDecimal={false}
+              allowNegative={false}
+              min={1}
+              key={formCambiarCantidad.key("nuevaCantidad")}
+              {...formCambiarCantidad.getInputProps("nuevaCantidad")}
+            />
+            <Button
+              type="submit"
+              fullWidth
+              onClick={() => modals.closeAll()}
+              mt="md"
+            >
+              Actualizar
+            </Button>
+          </form>
+        </>
+      ),
+    });
+
+  const formCambiarPrecio = useForm({
+    mode: "uncontrolled",
+    initialValues: {
+      precio_unitario: 0,
+    },
+  });
+  const abrirModalCambiarPrecio = (product) =>
+    modals.open({
+      centered: true,
+      title: "Actualizar Precio",
+      children: (
+        <>
+          <form
+            onSubmit={formCambiarPrecio.onSubmit((values) => {
+              formCambiarPrecio.reset();
+              Producto.actualizarProducto(product.id, values)
+                .then((res) => {
+                  const productoActualizado = res.data;
+                  for (const producto of productosAgregados) {
+                    if (producto.id === productoActualizado.id) {
+                      producto.precio_unitario =
+                        productoActualizado.precio_unitario;
+                      producto.importe =
+                        producto.cantidad * producto.precio_unitario;
+                    }
+                  }
+                  setProductosAgregados([...productosAgregados]);
+                })
+                .catch((err) => console.error(err));
+            })}
+          >
+            <NumberInput
+              placeholder="Ingresa la nueva cantidad"
+              allowDecimal={false}
+              allowNegative={false}
+              min={0}
+              prefix="$"
+              hideControls
+              key={formCambiarPrecio.key("precio_unitario")}
+              {...formCambiarPrecio.getInputProps("precio_unitario")}
+            />
+
+            <Button
+              type="submit"
+              fullWidth
+              onClick={() => modals.closeAll()}
+              mt="md"
+            >
+              Actualizar
+            </Button>
+          </form>
+        </>
+      ),
+    });
+
+  const abrirModalEliminarProducto = (productIndex) =>
+    modals.openConfirmModal({
+      title: "Eliminar producto",
+      centered: true,
+      children: (
+        <Text size="sm">
+          ¿Estás seguro que deseas eliminar el producto de la cotización?
+        </Text>
+      ),
+      labels: { confirm: "Eliminar", cancel: "No eliminar" },
+      confirmProps: { color: "red" },
+      onCancel: () => console.log("Cancel"),
+      onConfirm: () => {
+        productosAgregados.splice(productIndex, 1);
+        setProductosAgregados([...productosAgregados]);
+      },
+    });
+
+  const renglones = productosAgregados.map((producto, index) => (
     <Table.Tr key={producto.id}>
       <Table.Td>
-        <MenuProducto />
+        <MenuProducto
+          productIndex={index}
+          producto={producto}
+          cambiarCantidad={cambiarCantidad}
+          cambiarPrecio={abrirModalCambiarPrecio}
+          eliminarProducto={abrirModalEliminarProducto}
+        />
       </Table.Td>
 
       <Table.Td>{producto.cantidad}</Table.Td>
       <Table.Td>{producto.descripcion}</Table.Td>
       <Table.Td>{producto.unidad}</Table.Td>
-      <Table.Td>$ {producto.precio_unitario}</Table.Td>
-      <Table.Td>$ {producto.importe}</Table.Td>
+      <Table.Td>$ {producto.precio_unitario.toLocaleString("en")}</Table.Td>
+      <Table.Td>$ {producto.importe.toLocaleString("en")}</Table.Td>
     </Table.Tr>
   ));
 
   const clienteCreadoExitosamente = (cliente) => {
+    setRefreshClientes(true);
     setClienteSeleccionado(cliente);
     setValorCliente("");
   };
 
   const productoCreadoExitosamente = (nuevoProducto) => {
+    setRefreshProductos(true);
     nuevoProducto.cantidad = valorCantidad;
     nuevoProducto.importe = valorCantidad * nuevoProducto.precio_unitario;
     setProductosAgregados(productosAgregados.concat(Array(nuevoProducto)));
@@ -207,7 +361,15 @@ export default function Cotizaciones() {
         )}
         {clienteSeleccionado.id && (
           <Button onClick={() => setClienteSeleccionado(clienteVacio)}>
-            Cambiar cliente
+            Cambiar Cliente
+          </Button>
+        )}
+        {clienteSeleccionado.id == null && (
+          <Button
+            disabled={valorCliente === ""}
+            onClick={() => seleccionarCliente("Enter")}
+          >
+            Asignar Cliente
           </Button>
         )}
       </Flex>
@@ -235,12 +397,18 @@ export default function Cotizaciones() {
         ></NumberInput>
         <Text>Producto:</Text>
         <Autocomplete
-          placeholder="Agregar productos"
+          placeholder="Buscar productos"
           value={valorProducto}
           onChange={setValorProducto}
           onKeyUp={(value) => agregarProducto(value.key)}
           data={productos.map((producto) => producto.descripcion)}
         />
+        <Button
+          disabled={valorProducto === ""}
+          onClick={() => agregarProducto("Enter")}
+        >
+          Agregar
+        </Button>
       </Flex>
       <ScrollArea h={370}>
         <Table
@@ -297,10 +465,9 @@ export default function Cotizaciones() {
         )}
         <Title size="h3">
           Total: $
-          {productosAgregados.reduce(
-            (acc, producto) => acc + producto.importe,
-            0
-          )}
+          {productosAgregados
+            .reduce((acc, producto) => acc + producto.importe, 0)
+            .toLocaleString("en")}
         </Title>
       </Flex>
     </Stack>
