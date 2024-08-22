@@ -1,13 +1,8 @@
-import {
-  Button,
-  Container,
-  NumberInput,
-  Stack,
-  TextInput,
-} from "@mantine/core";
+import { Button, Container, InputBase, Stack, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { Cliente } from "../servicios/clientes";
 import { modals } from "@mantine/modals";
+import { IMaskInput } from "react-imask";
 
 export default function CrearActualizarCliente({
   clienteCreado,
@@ -25,9 +20,11 @@ export default function CrearActualizarCliente({
     },
     validate: {
       correo: (value) => (/^\S+@\S+$/.test(value) ? null : "Correo invalido"),
-      nombre: (value) => (value === "" ? "Ingresa el Nombre" : null),
-      telefono: (value) => (value === "" ? "Ingresa No. de Telefono" : null),
-      domicilio: (value) => (value === "" ? "Ingresa una domicilio" : null),
+      nombre: (value) => (value === "" ? "Ingresa el nombre" : null),
+      telefono: (value) => (value === "" ? "Ingresa número de teléfono" : null),
+      telefono: (value) =>
+        value.length < 14 ? "Ingrese completo el número de teléfono" : null,
+      domicilio: (value) => (value === "" ? "Ingresa un domicilio" : null),
     },
   });
   return (
@@ -64,9 +61,11 @@ export default function CrearActualizarCliente({
             key={form.key("correo")}
             {...form.getInputProps("correo")}
           />
-          <TextInput
+          <InputBase
             label="Telefono"
-            placeholder="Ingrese el No De Telefono"
+            component={IMaskInput}
+            mask="(000) 000 0000"
+            placeholder="Ingrese número de teléfono"
             key={form.key("telefono")}
             {...form.getInputProps("telefono")}
           />
