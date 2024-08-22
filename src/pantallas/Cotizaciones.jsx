@@ -3,6 +3,7 @@ import {
   Button,
   Divider,
   Flex,
+  FocusTrap,
   NumberInput,
   ScrollArea,
   Stack,
@@ -22,6 +23,7 @@ import { Cotizacion } from "../servicios/cotizaciones";
 import { notifications } from "@mantine/notifications";
 import { BASE_URL } from "../servicios/config";
 import { useForm } from "@mantine/form";
+import { IconArrowBack, IconArrowBackUp } from "@tabler/icons-react";
 
 const clienteVacio = {
   id: null,
@@ -33,6 +35,7 @@ const clienteVacio = {
 };
 const cotizacionVacia = {
   id: null,
+  diasCotizacion: null,
 };
 
 export default function Cotizaciones() {
@@ -139,11 +142,11 @@ export default function Cotizaciones() {
   const formCambiarCantidad = useForm({
     mode: "uncontrolled",
     initialValues: {
-      nuevaCantidad: 1,
+      nuevaCantidad: null,
     },
   });
 
-  const cambiarCantidad = (index, producto) =>
+  const abrirModalCambiarCantidad = (index, producto) =>
     modals.open({
       centered: true,
       title: "Actualizar cantidad ",
@@ -151,22 +154,27 @@ export default function Cotizaciones() {
         <>
           <form
             onSubmit={formCambiarCantidad.onSubmit((values) => {
-              productosAgregados[index].cantidad = values.nuevaCantidad;
-              productosAgregados[index].importe =
-                values.nuevaCantidad *
-                productosAgregados[index].precio_unitario;
-              setProductosAgregados([...productosAgregados]);
+              if (values.nuevaCantidad != null) {
+                productosAgregados[index].cantidad = values.nuevaCantidad;
+                productosAgregados[index].importe =
+                  values.nuevaCantidad *
+                  productosAgregados[index].precio_unitario;
+                setProductosAgregados([...productosAgregados]);
+              }
               formCambiarCantidad.reset();
             })}
           >
-            <NumberInput
-              placeholder="Ingresa la nueva cantidad"
-              allowDecimal={false}
-              allowNegative={false}
-              min={1}
-              key={formCambiarCantidad.key("nuevaCantidad")}
-              {...formCambiarCantidad.getInputProps("nuevaCantidad")}
-            />
+            <FocusTrap active>
+              <NumberInput
+                data-autofocus
+                placeholder="Ingresa la nueva cantidad"
+                allowDecimal={false}
+                allowNegative={false}
+                min={1}
+                key={formCambiarCantidad.key("nuevaCantidad")}
+                {...formCambiarCantidad.getInputProps("nuevaCantidad")}
+              />
+            </FocusTrap>
             <Button
               type="submit"
               fullWidth
@@ -183,7 +191,7 @@ export default function Cotizaciones() {
   const formCambiarPrecio = useForm({
     mode: "uncontrolled",
     initialValues: {
-      precio_unitario: 0,
+      precio_unitario: null,
     },
   });
   const abrirModalCambiarPrecio = (product) =>
@@ -195,33 +203,37 @@ export default function Cotizaciones() {
           <form
             onSubmit={formCambiarPrecio.onSubmit((values) => {
               formCambiarPrecio.reset();
-              Producto.actualizarProducto(product.id, values)
-                .then((res) => {
-                  const productoActualizado = res.data;
-                  for (const producto of productosAgregados) {
-                    if (producto.id === productoActualizado.id) {
-                      producto.precio_unitario =
-                        productoActualizado.precio_unitario;
-                      producto.importe =
-                        producto.cantidad * producto.precio_unitario;
+              if (values.precio_unitario != null) {
+                Producto.actualizarProducto(product.id, values)
+                  .then((res) => {
+                    const productoActualizado = res.data;
+                    for (const producto of productosAgregados) {
+                      if (producto.id === productoActualizado.id) {
+                        producto.precio_unitario =
+                          productoActualizado.precio_unitario;
+                        producto.importe =
+                          producto.cantidad * producto.precio_unitario;
+                      }
                     }
-                  }
-                  setProductosAgregados([...productosAgregados]);
-                })
-                .catch((err) => console.error(err));
+                    setProductosAgregados([...productosAgregados]);
+                  })
+                  .catch((err) => console.error(err));
+              }
             })}
           >
-            <NumberInput
-              placeholder="Ingresa la nueva cantidad"
-              allowDecimal={false}
-              allowNegative={false}
-              min={0}
-              prefix="$"
-              hideControls
-              key={formCambiarPrecio.key("precio_unitario")}
-              {...formCambiarPrecio.getInputProps("precio_unitario")}
-            />
-
+            <FocusTrap active={true}>
+              <NumberInput
+                data-autofocus
+                placeholder="Ingresa el nuevo precio"
+                allowDecimal={false}
+                allowNegative={false}
+                min={0}
+                prefix="$"
+                hideControls
+                key={formCambiarPrecio.key("precio_unitario")}
+                {...formCambiarPrecio.getInputProps("precio_unitario")}
+              />
+            </FocusTrap>
             <Button
               type="submit"
               fullWidth
@@ -259,7 +271,7 @@ export default function Cotizaciones() {
         <MenuProducto
           productIndex={index}
           producto={producto}
-          cambiarCantidad={cambiarCantidad}
+          cambiarCantidad={abrirModalCambiarCantidad}
           cambiarPrecio={abrirModalCambiarPrecio}
           eliminarProducto={abrirModalEliminarProducto}
         />
@@ -303,52 +315,84 @@ export default function Cotizaciones() {
           lugarDeEntrega: lugarDeEntrega,
         };
         Cotizacion.crearCotizacion(bodyCotizacion)
-          .then((result) => {
+          .then(async (result) => {
             setCotizacion(result.data);
-            productosAgregados.map((producto) => {
-              const bodyProducto = {
-                cotizacionId: result.data.id,
-                productoId: producto.id,
-                cantidad: producto.cantidad,
-              };
-              Cotizacion.agregarProductoCotizacion(bodyProducto)
-                .then((result) =>
-                  notifications.show({
-                    title: "Cotización creada con exito",
-                    message: "Se creó la cotización correctamente",
-                  })
-                )
-                .catch((error) => console.error(error));
+            const responseProductos = await Promise.all(
+              productosAgregados.map((producto) => {
+                const bodyProducto = {
+                  cotizacionId: result.data.id,
+                  productoId: producto.id,
+                  cantidad: producto.cantidad,
+                };
+                Cotizacion.agregarProductoCotizacion(bodyProducto);
+              })
+            );
+            notifications.show({
+              title: "Cotización creada con exito",
+              message: "Se creó la cotización correctamente",
             });
           })
-          .catch((error) => console.error(error));
+          .catch((error) =>
+            notifications.show({
+              title: "Cotización creada con exito",
+              message: "Se creó la cotización correctamente",
+            })
+          );
       },
     });
 
   return (
     <Stack>
-      <Title>Cotización</Title>
       <Flex gap="md" align="center">
-        <Text size="h2">Folio: {folio}</Text>
-        <Text size="h2">Dias de Cotizacion: {} </Text>
-        <NumberInput
-          onChange={(value) => setDiasDeCotizacion(value)}
-          defaultValue={1}
-          min={1}
-        ></NumberInput>
-        <Text size="h2">Lugar de Entrega: {} </Text>
-        <Autocomplete
-          onChange={(value) => setLugarDeEntrega(value)}
-          placeholder="Punto de Recepcion"
-        />
+        {cotizacion.id != null && (
+          <Button variant="light" leftSection={<IconArrowBackUp size={14} />}>
+            Crear nueva
+          </Button>
+        )}
+        <Title>Cotización</Title>
+      </Flex>
+      <Flex gap="md" align="center">
+        <Text size="h2">
+          <Text span fw={700} inherit>
+            Folio:
+          </Text>
+          {" " + folio}
+        </Text>
+        <Text size="h2">
+          <Text span fw={700} inherit>
+            Dias de vigencia:{" "}
+          </Text>
+          {cotizacion.diasCotizacion ?? ""}
+        </Text>
+        {cotizacion.diasCotizacion == null && (
+          <NumberInput
+            onChange={(value) => setDiasDeCotizacion(value)}
+            defaultValue={1}
+            min={1}
+          />
+        )}
+        <Text size="h2">
+          <Text span fw={700} inherit>
+            Lugar de Entrega:{" "}
+          </Text>
+          {cotizacion.lugarDeEntrega ?? ""}
+        </Text>
+        {cotizacion.lugarDeEntrega == null && (
+          <Autocomplete
+            onChange={(value) => setLugarDeEntrega(value)}
+            placeholder="Punto de Recepcion"
+          />
+        )}
       </Flex>
 
       {/*Datos del cliente*/}
       <Divider my="xs" label="Datos del cliente" labelPosition="left" />
-      <Flex gap="md" align="center">
+      <Flex gap="xs" align="center">
         <Text>
-          Cliente:{" "}
-          {clienteSeleccionado.id != null ? clienteSeleccionado.nombre : ""}
+          <Text span fw={700} inherit>
+            Cliente:{" "}
+          </Text>
+          {clienteSeleccionado.nombre ?? ""}
         </Text>
         {clienteSeleccionado.id == null && (
           <Autocomplete
@@ -359,12 +403,12 @@ export default function Cotizaciones() {
             data={clientes.map((cliente) => cliente.nombre)}
           />
         )}
-        {clienteSeleccionado.id && (
+        {clienteSeleccionado.id && cotizacion.id == null && (
           <Button onClick={() => setClienteSeleccionado(clienteVacio)}>
             Cambiar Cliente
           </Button>
         )}
-        {clienteSeleccionado.id == null && (
+        {clienteSeleccionado.id == null && cotizacion.id == null && (
           <Button
             disabled={valorCliente === ""}
             onClick={() => seleccionarCliente("Enter")}
@@ -373,43 +417,58 @@ export default function Cotizaciones() {
           </Button>
         )}
       </Flex>
-      <Flex gap="xl">
-        {clienteSeleccionado.id != null && (
-          <Text>Correo: {clienteSeleccionado.correo}</Text>
-        )}
-        {clienteSeleccionado.id != null && (
-          <Text>Telefono: {clienteSeleccionado.telefono}</Text>
-        )}
-        {clienteSeleccionado.id != null && (
-          <Text>Domicilio: {clienteSeleccionado.domicilio}</Text>
-        )}
-      </Flex>
+      {clienteSeleccionado.id != null && (
+        <Flex gap="xl">
+          <Text>
+            <Text span fw={700} inherit>
+              Correo:{" "}
+            </Text>
+            {clienteSeleccionado.correo}
+          </Text>
+          <Text>
+            <Text span fw={700} inherit>
+              Telefono:{" "}
+            </Text>
+            {clienteSeleccionado.telefono}
+          </Text>
+          <Text>
+            <Text span fw={700} inherit>
+              Domicilio:{" "}
+            </Text>
+            {clienteSeleccionado.domicilio}
+          </Text>
+        </Flex>
+      )}
 
       {/*Productos*/}
-      <Divider my="xs" label="Productos" labelPosition="left" />
-      <Flex gap="md" align="center">
-        <Text>Cantidad: </Text>
-        <NumberInput
-          value={valorCantidad}
-          onChange={setValorCantidad}
-          defaultValue={1}
-          min={1}
-        ></NumberInput>
-        <Text>Producto:</Text>
-        <Autocomplete
-          placeholder="Buscar productos"
-          value={valorProducto}
-          onChange={setValorProducto}
-          onKeyUp={(value) => agregarProducto(value.key)}
-          data={productos.map((producto) => producto.descripcion)}
-        />
-        <Button
-          disabled={valorProducto === ""}
-          onClick={() => agregarProducto("Enter")}
-        >
-          Agregar
-        </Button>
-      </Flex>
+      {cotizacion.id == null && (
+        <Divider my="xs" label="Productos" labelPosition="left" />
+      )}
+      {cotizacion.id == null && (
+        <Flex gap="md" align="center">
+          <Text>Cantidad: </Text>
+          <NumberInput
+            value={valorCantidad}
+            onChange={setValorCantidad}
+            defaultValue={1}
+            min={1}
+          ></NumberInput>
+          <Text>Producto:</Text>
+          <Autocomplete
+            placeholder="Buscar productos"
+            value={valorProducto}
+            onChange={setValorProducto}
+            onKeyUp={(value) => agregarProducto(value.key)}
+            data={productos.map((producto) => producto.descripcion)}
+          />
+          <Button
+            disabled={valorProducto === ""}
+            onClick={() => agregarProducto("Enter")}
+          >
+            Agregar
+          </Button>
+        </Flex>
+      )}
       <ScrollArea h={370}>
         <Table
           stickyHeader
@@ -456,12 +515,18 @@ export default function Cotizaciones() {
             Descargar Cotización
           </Button>
         )}
-        {clienteSeleccionado.id === null ||
-        lugarDeEntrega == "" ||
-        productosAgregados.length < 1 ? (
-          <Button disabled>Crear Cotizacion</Button>
-        ) : (
-          <Button onClick={confirmarCotizacion}>Crear Cotizacion</Button>
+
+        {cotizacion.id == null && (
+          <Button
+            disabled={
+              clienteSeleccionado.id === null ||
+              lugarDeEntrega == "" ||
+              productosAgregados.length < 1
+            }
+            onClick={confirmarCotizacion}
+          >
+            Crear Cotizacion
+          </Button>
         )}
         <Title size="h3">
           Total: $
