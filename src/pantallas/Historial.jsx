@@ -1,8 +1,17 @@
-import { Button, Container, Flex, Stack, Table, Title } from "@mantine/core";
+import {
+  Button,
+  ColorInput,
+  Container,
+  Flex,
+  Stack,
+  Table,
+  Title,
+} from "@mantine/core";
 import { useEffect, useState } from "react";
 import { Cotizacion } from "../servicios/cotizaciones";
 import { notifications } from "@mantine/notifications";
 import { BASE_URL } from "../servicios/config";
+import { useNavigate } from "react-router-dom";
 const cotizacionVacia = {
   id: null,
 };
@@ -11,6 +20,8 @@ export default function Historial() {
   const [cotizacionSeleccionada, actualizarCotizacionSeleccionada] =
     useState(cotizacionVacia);
   const [refresh, setRefresh] = useState(false);
+  const navigate = useNavigate();
+
   useEffect(() => {
     Cotizacion.obtenerCotizaciones().then((result) => {
       actualizarCotizaciones(result.data);
@@ -34,6 +45,7 @@ export default function Historial() {
       <Table.Td>
         {new Date(cotizacion.fechaCreacion).toLocaleDateString()}
       </Table.Td>
+      <Table.Td>${cotizacion.total.toLocaleString("en")}</Table.Td>
     </Table.Tr>
   ));
 
@@ -60,28 +72,31 @@ export default function Historial() {
     <Stack>
       <Title>Historial</Title>
       <Flex gap="md">
-        {cotizacionSeleccionada.id === null ? (
-          <Button disabled>Descargar Cotizacion</Button>
-        ) : (
-          <Button
-            onClick={() =>
-              window.open(
-                BASE_URL +
-                  "/api/cotizaciones/descargar/" +
-                  cotizacionSeleccionada.id,
-                "_blank"
-              )
-            }
-          >
-            Descargar Cotizacion
-          </Button>
-        )}
-
-        {cotizacionSeleccionada.id === null ? (
-          <Button disabled>Eliminar Cotizacion</Button>
-        ) : (
-          <Button onClick={eliminarCotizacion}>Eliminar Cotizacion</Button>
-        )}
+        <Button
+          disabled={cotizacionSeleccionada.id === null}
+          onClick={() => navigate("/cotizaciones/" + cotizacionSeleccionada.id)}
+        >
+          Ver Detalle
+        </Button>
+        <Button
+          disabled={cotizacionSeleccionada.id === null}
+          onClick={() =>
+            window.open(
+              BASE_URL +
+                "/api/cotizaciones/descargar/" +
+                cotizacionSeleccionada.id,
+              "_blank"
+            )
+          }
+        >
+          Descargar
+        </Button>
+        <Button
+          disabled={cotizacionSeleccionada.id === null}
+          onClick={eliminarCotizacion}
+        >
+          Eliminar
+        </Button>
       </Flex>
       <Table>
         <Table.Thead>
@@ -89,6 +104,7 @@ export default function Historial() {
             <Table.Th>No. Folio</Table.Th>
             <Table.Th>Cliente</Table.Th>
             <Table.Th>Fecha</Table.Th>
+            <Table.Th>Importe</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>{renglones}</Table.Tbody>
