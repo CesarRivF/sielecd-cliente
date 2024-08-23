@@ -1,15 +1,16 @@
 import {
   Autocomplete,
+  Box,
   Button,
   Divider,
   Flex,
   FocusTrap,
+  LoadingOverlay,
   NumberInput,
   ScrollArea,
   Stack,
   Table,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import { useEffect, useState } from "react";
@@ -23,7 +24,9 @@ import { Cotizacion } from "../servicios/cotizaciones";
 import { notifications } from "@mantine/notifications";
 import { BASE_URL } from "../servicios/config";
 import { useForm } from "@mantine/form";
-import { IconArrowBack, IconArrowBackUp } from "@tabler/icons-react";
+import { IconArrowBackUp } from "@tabler/icons-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useDisclosure } from "@mantine/hooks";
 
 const clienteVacio = {
   id: null,
@@ -39,6 +42,7 @@ const cotizacionVacia = {
 };
 
 export default function Cotizaciones() {
+  const { cotizacionId } = useParams();
   const [productos, setProductos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState(clienteVacio);
@@ -54,21 +58,52 @@ export default function Cotizaciones() {
   const [cotizacion, setCotizacion] = useState(cotizacionVacia);
   const [refreshClientes, setRefreshClientes] = useState(false);
   const [refreshProductos, setRefreshProductos] = useState(false);
+  const [visible, { toggle: toggleLoader }] = useDisclosure(true);
+  const navigate = useNavigate();
+
+  const resetState = () => {
+    toggleLoader();
+    setDiasDeCotizacion(1);
+    setRefreshProductos(true);
+    setRefreshClientes(true);
+    setCotizacion(cotizacionVacia);
+    setClienteSeleccionado(clienteVacio);
+    setProductosAgregados([]);
+  };
 
   useEffect(() => {
-    Cotizacion.obtenerUltimoFolio().then((result) =>
-      setFolio(result.data.ultimoFolio + 1)
-    );
-  }, []);
+    if (cotizacionId) {
+      Cotizacion.obtenerCotizacionPorId(cotizacionId).then((result) => {
+        setFolio(result.data.id);
+        setCotizacion(result.data);
+        setClienteSeleccionado(result.data.cliente);
+        setProductosAgregados(result.data.productos);
+        toggleLoader();
+      });
+    }
+  }, [cotizacionId]);
 
   useEffect(() => {
-    Cliente.obtenerCliente().then((result) => setClientes(result.data));
-    setRefreshClientes(false);
+    if (!cotizacionId) {
+      Cotizacion.obtenerUltimoFolio().then((result) => {
+        setFolio(result.data.ultimoFolio + 1);
+        toggleLoader();
+      });
+    }
+  }, [cotizacionId]);
+
+  useEffect(() => {
+    if (!cotizacionId) {
+      Cliente.obtenerCliente().then((result) => setClientes(result.data));
+      setRefreshClientes(false);
+    }
   }, [refreshClientes]);
 
   useEffect(() => {
-    Producto.obtenerProductos().then((result) => setProductos(result.data));
-    setRefreshProductos(false);
+    if (!cotizacionId) {
+      Producto.obtenerProductos().then((result) => setProductos(result.data));
+      setRefreshProductos(false);
+    }
   }, [refreshProductos]);
 
   const seleccionarCliente = (key) => {
@@ -268,13 +303,15 @@ export default function Cotizaciones() {
   const renglones = productosAgregados.map((producto, index) => (
     <Table.Tr key={producto.id}>
       <Table.Td>
-        <MenuProducto
-          productIndex={index}
-          producto={producto}
-          cambiarCantidad={abrirModalCambiarCantidad}
-          cambiarPrecio={abrirModalCambiarPrecio}
-          eliminarProducto={abrirModalEliminarProducto}
-        />
+        {cotizacion.id == null && (
+          <MenuProducto
+            productIndex={index}
+            producto={producto}
+            cambiarCantidad={abrirModalCambiarCantidad}
+            cambiarPrecio={abrirModalCambiarPrecio}
+            eliminarProducto={abrirModalEliminarProducto}
+          />
+        )}
       </Table.Td>
 
       <Table.Td>{producto.cantidad}</Table.Td>
@@ -314,23 +351,30 @@ export default function Cotizaciones() {
           clienteId: clienteSeleccionado.id,
           lugarDeEntrega: lugarDeEntrega,
         };
+        toggleLoader();
         Cotizacion.crearCotizacion(bodyCotizacion)
           .then(async (result) => {
-            setCotizacion(result.data);
-            const responseProductos = await Promise.all(
+            await Promise.all(
               productosAgregados.map((producto) => {
                 const bodyProducto = {
                   cotizacionId: result.data.id,
                   productoId: producto.id,
                   cantidad: producto.cantidad,
+                  descripcion: producto.descripcion,
+                  unidad: producto.unidad,
+                  precio_unitario: producto.precio_unitario,
+                  importe: producto.cantidad * producto.precio_unitario,
                 };
                 Cotizacion.agregarProductoCotizacion(bodyProducto);
               })
             );
+            await Cotizacion.actualizarTotalCotizacion(result.data.id);
             notifications.show({
               title: "Cotización creada con exito",
               message: "Se creó la cotización correctamente",
             });
+            navigate("/cotizaciones/" + result.data.id);
+            resetState();
           })
           .catch((error) =>
             notifications.show({
@@ -342,199 +386,213 @@ export default function Cotizaciones() {
     });
 
   return (
-    <Stack>
-      <Flex gap="md" align="center">
-        {cotizacion.id != null && (
-          <Button variant="light" leftSection={<IconArrowBackUp size={14} />}>
-            Crear nueva
-          </Button>
-        )}
-        <Title>Cotización</Title>
-      </Flex>
-      <Flex gap="md" align="center">
-        <Text size="h2">
-          <Text span fw={700} inherit>
-            Folio:
-          </Text>
-          {" " + folio}
-        </Text>
-        <Text size="h2">
-          <Text span fw={700} inherit>
-            Dias de vigencia:{" "}
-          </Text>
-          {cotizacion.diasCotizacion ?? ""}
-        </Text>
-        {cotizacion.diasCotizacion == null && (
-          <NumberInput
-            onChange={(value) => setDiasDeCotizacion(value)}
-            defaultValue={1}
-            min={1}
-          />
-        )}
-        <Text size="h2">
-          <Text span fw={700} inherit>
-            Lugar de Entrega:{" "}
-          </Text>
-          {cotizacion.lugarDeEntrega ?? ""}
-        </Text>
-        {cotizacion.lugarDeEntrega == null && (
-          <Autocomplete
-            onChange={(value) => setLugarDeEntrega(value)}
-            placeholder="Punto de Recepcion"
-          />
-        )}
-      </Flex>
-
-      {/*Datos del cliente*/}
-      <Divider my="xs" label="Datos del cliente" labelPosition="left" />
-      <Flex gap="xs" align="center">
-        <Text>
-          <Text span fw={700} inherit>
-            Cliente:{" "}
-          </Text>
-          {clienteSeleccionado.nombre ?? ""}
-        </Text>
-        {clienteSeleccionado.id == null && (
-          <Autocomplete
-            value={valorCliente}
-            onChange={setValorCliente}
-            placeholder="Seleccione cliente"
-            onKeyUp={(value) => seleccionarCliente(value.key)}
-            data={clientes.map((cliente) => cliente.nombre)}
-          />
-        )}
-        {clienteSeleccionado.id && cotizacion.id == null && (
-          <Button onClick={() => setClienteSeleccionado(clienteVacio)}>
-            Cambiar Cliente
-          </Button>
-        )}
-        {clienteSeleccionado.id == null && cotizacion.id == null && (
-          <Button
-            disabled={valorCliente === ""}
-            onClick={() => seleccionarCliente("Enter")}
-          >
-            Asignar Cliente
-          </Button>
-        )}
-      </Flex>
-      {clienteSeleccionado.id != null && (
-        <Flex gap="xl">
-          <Text>
-            <Text span fw={700} inherit>
-              Correo:{" "}
-            </Text>
-            {clienteSeleccionado.correo}
-          </Text>
-          <Text>
-            <Text span fw={700} inherit>
-              Telefono:{" "}
-            </Text>
-            {clienteSeleccionado.telefono}
-          </Text>
-          <Text>
-            <Text span fw={700} inherit>
-              Domicilio:{" "}
-            </Text>
-            {clienteSeleccionado.domicilio}
-          </Text>
-        </Flex>
-      )}
-
-      {/*Productos*/}
-      {cotizacion.id == null && (
-        <Divider my="xs" label="Productos" labelPosition="left" />
-      )}
-      {cotizacion.id == null && (
+    <Box pos="relative">
+      <LoadingOverlay
+        visible={visible}
+        zIndex={1000}
+        overlayProps={{ radius: "sm", blur: 2 }}
+      />
+      <Stack>
         <Flex gap="md" align="center">
-          <Text>Cantidad: </Text>
-          <NumberInput
-            value={valorCantidad}
-            onChange={setValorCantidad}
-            defaultValue={1}
-            min={1}
-          ></NumberInput>
-          <Text>Producto:</Text>
-          <Autocomplete
-            placeholder="Buscar productos"
-            value={valorProducto}
-            onChange={setValorProducto}
-            onKeyUp={(value) => agregarProducto(value.key)}
-            data={productos.map((producto) => producto.descripcion)}
-          />
-          <Button
-            disabled={valorProducto === ""}
-            onClick={() => agregarProducto("Enter")}
-          >
-            Agregar
-          </Button>
+          {cotizacion.id != null && (
+            <Button
+              variant="light"
+              leftSection={<IconArrowBackUp size={14} />}
+              onClick={() => {
+                navigate("/cotizaciones");
+                resetState();
+              }}
+            >
+              Crear nueva
+            </Button>
+          )}
+          <Title>Cotización</Title>
         </Flex>
-      )}
-      <ScrollArea h={370}>
-        <Table
-          stickyHeader
-          striped
-          highlightOnHover
-          withTableBorder
-          withColumnBorders
-        >
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th></Table.Th>
+        <Flex gap="md" align="center">
+          <Text size="h2">
+            <Text span fw={700} inherit>
+              Folio:
+            </Text>
+            {" " + folio}
+          </Text>
+          <Text size="h2">
+            <Text span fw={700} inherit>
+              Dias de vigencia:{" "}
+            </Text>
+            {cotizacion.diasCotizacion ?? ""}
+          </Text>
+          {cotizacion.diasCotizacion == null && (
+            <NumberInput
+              onChange={(value) => setDiasDeCotizacion(value)}
+              defaultValue={1}
+              min={1}
+            />
+          )}
+          <Text size="h2">
+            <Text span fw={700} inherit>
+              Lugar de Entrega:{" "}
+            </Text>
+            {cotizacion.lugarDeEntrega ?? ""}
+          </Text>
+          {cotizacion.lugarDeEntrega == null && (
+            <Autocomplete
+              onChange={(value) => setLugarDeEntrega(value)}
+              placeholder="Punto de Recepcion"
+            />
+          )}
+        </Flex>
 
-              <Table.Th>Cantidad</Table.Th>
-              <Table.Th>Producto</Table.Th>
-              <Table.Th>Unidad</Table.Th>
-              <Table.Th>Precio</Table.Th>
-              <Table.Th>Importe</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>{renglones}</Table.Tbody>
-        </Table>
-      </ScrollArea>
-
-      <Divider />
-      <Flex
-        mih={50}
-        gap="md"
-        justify="flex-end"
-        align="center"
-        direction="row"
-        wrap="wrap"
-      >
-        {cotizacion.id === null ? (
-          <Button disabled>Descargar Cotización</Button>
-        ) : (
-          <Button
-            onClick={() =>
-              window.open(
-                BASE_URL + "/api/cotizaciones/descargar/" + cotizacion.id,
-                "_blank"
-              )
-            }
-          >
-            Descargar Cotización
-          </Button>
+        {/*Datos del cliente*/}
+        <Divider my="xs" label="Datos del cliente" labelPosition="left" />
+        <Flex gap="xs" align="center">
+          <Text>
+            <Text span fw={700} inherit>
+              Cliente:{" "}
+            </Text>
+            {clienteSeleccionado.nombre ?? ""}
+          </Text>
+          {clienteSeleccionado.id == null && (
+            <Autocomplete
+              value={valorCliente}
+              onChange={setValorCliente}
+              placeholder="Seleccione cliente"
+              onKeyUp={(value) => seleccionarCliente(value.key)}
+              data={clientes.map((cliente) => cliente.nombre)}
+            />
+          )}
+          {clienteSeleccionado.id && cotizacion.id == null && (
+            <Button onClick={() => setClienteSeleccionado(clienteVacio)}>
+              Cambiar Cliente
+            </Button>
+          )}
+          {clienteSeleccionado.id == null && cotizacion.id == null && (
+            <Button
+              disabled={valorCliente === ""}
+              onClick={() => seleccionarCliente("Enter")}
+            >
+              Asignar Cliente
+            </Button>
+          )}
+        </Flex>
+        {clienteSeleccionado.id != null && (
+          <Flex gap="xl">
+            <Text>
+              <Text span fw={700} inherit>
+                Correo:{" "}
+              </Text>
+              {clienteSeleccionado.correo}
+            </Text>
+            <Text>
+              <Text span fw={700} inherit>
+                Telefono:{" "}
+              </Text>
+              {clienteSeleccionado.telefono}
+            </Text>
+            <Text>
+              <Text span fw={700} inherit>
+                Domicilio:{" "}
+              </Text>
+              {clienteSeleccionado.domicilio}
+            </Text>
+          </Flex>
         )}
 
+        {/*Productos*/}
         {cotizacion.id == null && (
-          <Button
-            disabled={
-              clienteSeleccionado.id === null ||
-              lugarDeEntrega == "" ||
-              productosAgregados.length < 1
-            }
-            onClick={confirmarCotizacion}
-          >
-            Crear Cotizacion
-          </Button>
+          <Divider my="xs" label="Productos" labelPosition="left" />
         )}
-        <Title size="h3">
-          Total: $
-          {productosAgregados
-            .reduce((acc, producto) => acc + producto.importe, 0)
-            .toLocaleString("en")}
-        </Title>
-      </Flex>
-    </Stack>
+        {cotizacion.id == null && (
+          <Flex gap="md" align="center">
+            <Text>Cantidad: </Text>
+            <NumberInput
+              value={valorCantidad}
+              onChange={setValorCantidad}
+              defaultValue={1}
+              min={1}
+            ></NumberInput>
+            <Text>Producto:</Text>
+            <Autocomplete
+              placeholder="Buscar productos"
+              value={valorProducto}
+              onChange={setValorProducto}
+              onKeyUp={(value) => agregarProducto(value.key)}
+              data={productos.map((producto) => producto.descripcion)}
+            />
+            <Button
+              disabled={valorProducto === ""}
+              onClick={() => agregarProducto("Enter")}
+            >
+              Agregar
+            </Button>
+          </Flex>
+        )}
+        <ScrollArea h={370}>
+          <Table
+            stickyHeader
+            striped
+            highlightOnHover
+            withTableBorder
+            withColumnBorders
+          >
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th></Table.Th>
+
+                <Table.Th>Cantidad</Table.Th>
+                <Table.Th>Producto</Table.Th>
+                <Table.Th>Unidad</Table.Th>
+                <Table.Th>Precio</Table.Th>
+                <Table.Th>Importe</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>{renglones}</Table.Tbody>
+          </Table>
+        </ScrollArea>
+
+        <Divider />
+        <Flex
+          mih={50}
+          gap="md"
+          justify="flex-end"
+          align="center"
+          direction="row"
+          wrap="wrap"
+        >
+          {cotizacion.id === null ? (
+            <Button disabled>Descargar Cotización</Button>
+          ) : (
+            <Button
+              onClick={() =>
+                window.open(
+                  BASE_URL + "/api/cotizaciones/descargar/" + cotizacion.id,
+                  "_blank"
+                )
+              }
+            >
+              Descargar Cotización
+            </Button>
+          )}
+
+          {cotizacion.id == null && (
+            <Button
+              disabled={
+                clienteSeleccionado.id === null ||
+                lugarDeEntrega == "" ||
+                productosAgregados.length < 1
+              }
+              onClick={confirmarCotizacion}
+            >
+              Crear Cotizacion
+            </Button>
+          )}
+          <Title size="h3">
+            Total: $
+            {productosAgregados
+              .reduce((acc, producto) => acc + producto.importe, 0)
+              .toLocaleString("en")}
+          </Title>
+        </Flex>
+      </Stack>
+    </Box>
   );
 }
