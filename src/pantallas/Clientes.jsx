@@ -5,6 +5,7 @@ import {
   Modal,
   Stack,
   Table,
+  Text,
   Title,
 } from "@mantine/core";
 import { useEffect, useState } from "react";
@@ -12,6 +13,7 @@ import { Cliente } from "../servicios/clientes";
 import { useDisclosure } from "@mantine/hooks";
 import CrearActualizarCliente from "../modales/CrearActualizarCliente";
 import { notifications } from "@mantine/notifications";
+import { modals } from "@mantine/modals";
 
 const clienteVacio = {
   id: null,
@@ -64,6 +66,24 @@ export default function Clientes() {
       message: crearCiente ? "Cliente Nuevo Agregado" : "Cliente Modificado",
     });
   };
+
+  const abrirModalEliminarProducto = () =>
+    modals.openConfirmModal({
+      title: "Eliminar Cliente",
+      centered: true,
+      children: (
+        <>
+          <Text size="md">¿Estás seguro que deseas eliminar el cliente?</Text>
+          <Text size="sm">
+            Nota: Se eliminaran todas las cotizaciones asociadas al cliente.
+          </Text>
+        </>
+      ),
+      labels: { confirm: "Eliminar", cancel: "Cancelar" },
+      confirmProps: { color: "red" },
+      onCancel: () => console.log("Cancel"),
+      onConfirm: () => eliminarCliente(),
+    });
 
   const eliminarCliente = () => {
     Cliente.eliminarCliente(clienteSeleccionado.id)
@@ -122,7 +142,7 @@ export default function Clientes() {
         {clienteSeleccionado.id === null ? (
           <Button disabled>Eliminar cliente</Button>
         ) : (
-          <Button onClick={eliminarCliente}>Eliminar cliente</Button>
+          <Button onClick={abrirModalEliminarProducto}>Eliminar cliente</Button>
         )}
       </Flex>
       <Table>

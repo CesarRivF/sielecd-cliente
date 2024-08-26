@@ -45,7 +45,9 @@ export default function Historial() {
       <Table.Td>
         {new Date(cotizacion.fechaCreacion).toLocaleDateString()}
       </Table.Td>
-      <Table.Td>${cotizacion.total.toLocaleString("en")}</Table.Td>
+      <Table.Td>
+        ${cotizacion.total ? cotizacion.total.toLocaleString("en") : "0.0"}
+      </Table.Td>
     </Table.Tr>
   ));
 

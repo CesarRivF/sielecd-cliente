@@ -21,12 +21,12 @@ import CrearActualizarProducto from "../modales/CrearActualizarProducto";
 import { modals } from "@mantine/modals";
 import MenuProducto from "../modales/MenuProducto";
 import { Cotizacion } from "../servicios/cotizaciones";
-import { notifications } from "@mantine/notifications";
 import { BASE_URL } from "../servicios/config";
 import { useForm } from "@mantine/form";
 import { IconArrowBackUp } from "@tabler/icons-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDisclosure } from "@mantine/hooks";
+import { Notificaciones } from "../utils/Notificaciones";
 
 const clienteVacio = {
   id: null,
@@ -64,8 +64,8 @@ export default function Cotizaciones() {
   const resetState = () => {
     toggleLoader();
     setDiasDeCotizacion(1);
-    setRefreshProductos(true);
-    setRefreshClientes(true);
+    setRefreshProductos(!refreshProductos);
+    setRefreshClientes(!refreshClientes);
     setCotizacion(cotizacionVacia);
     setClienteSeleccionado(clienteVacio);
     setProductosAgregados([]);
@@ -95,14 +95,12 @@ export default function Cotizaciones() {
   useEffect(() => {
     if (!cotizacionId) {
       Cliente.obtenerCliente().then((result) => setClientes(result.data));
-      setRefreshClientes(false);
     }
   }, [refreshClientes]);
 
   useEffect(() => {
     if (!cotizacionId) {
       Producto.obtenerProductos().then((result) => setProductos(result.data));
-      setRefreshProductos(false);
     }
   }, [refreshProductos]);
 
@@ -291,7 +289,7 @@ export default function Cotizaciones() {
           ¿Estás seguro que deseas eliminar el producto de la cotización?
         </Text>
       ),
-      labels: { confirm: "Eliminar", cancel: "No eliminar" },
+      labels: { confirm: "Eliminar", cancel: "Cancelar" },
       confirmProps: { color: "red" },
       onCancel: () => console.log("Cancel"),
       onConfirm: () => {
@@ -323,13 +321,13 @@ export default function Cotizaciones() {
   ));
 
   const clienteCreadoExitosamente = (cliente) => {
-    setRefreshClientes(true);
+    setRefreshClientes(!refreshClientes);
     setClienteSeleccionado(cliente);
     setValorCliente("");
   };
 
   const productoCreadoExitosamente = (nuevoProducto) => {
-    setRefreshProductos(true);
+    setRefreshProductos(!refreshProductos);
     nuevoProducto.cantidad = valorCantidad;
     nuevoProducto.importe = valorCantidad * nuevoProducto.precio_unitario;
     setProductosAgregados(productosAgregados.concat(Array(nuevoProducto)));
@@ -353,8 +351,8 @@ export default function Cotizaciones() {
         };
         toggleLoader();
         Cotizacion.crearCotizacion(bodyCotizacion)
-          .then(async (result) => {
-            await Promise.all(
+          .then((result) => {
+            Promise.all(
               productosAgregados.map((producto) => {
                 const bodyProducto = {
                   cotizacionId: result.data.id,
@@ -365,23 +363,20 @@ export default function Cotizaciones() {
                   precio_unitario: producto.precio_unitario,
                   importe: producto.cantidad * producto.precio_unitario,
                 };
-                Cotizacion.agregarProductoCotizacion(bodyProducto);
+                return Cotizacion.agregarProductoCotizacion(bodyProducto);
               })
-            );
-            await Cotizacion.actualizarTotalCotizacion(result.data.id);
-            notifications.show({
-              title: "Cotización creada con exito",
-              message: "Se creó la cotización correctamente",
+            ).then((res) => {
+              if (res.every((product) => product.status == 200)) {
+                Cotizacion.actualizarTotalCotizacion(result.data.id);
+                Notificaciones.successCotizacion();
+                navigate("/cotizaciones/" + result.data.id);
+                resetState();
+              } else {
+                Notificaciones.errorCotizacion();
+              }
             });
-            navigate("/cotizaciones/" + result.data.id);
-            resetState();
           })
-          .catch((error) =>
-            notifications.show({
-              title: "Cotización creada con exito",
-              message: "Se creó la cotización correctamente",
-            })
-          );
+          .catch((error) => Notificaciones.errorCotizacion());
       },
     });
 
