@@ -162,7 +162,7 @@ export default function Cotizaciones() {
         setValorProducto("");
       } else {
         modals.open({
-          title: "Crear nuevo productoz",
+          title: "Crear nuevo producto",
           children: (
             <CrearActualizarProducto
               crearProducto={true}
