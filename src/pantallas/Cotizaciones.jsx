@@ -8,6 +8,7 @@ import {
   LoadingOverlay,
   NumberInput,
   ScrollArea,
+  Select,
   Stack,
   Table,
   Text,
@@ -48,6 +49,8 @@ export default function Cotizaciones() {
   const [clienteSeleccionado, setClienteSeleccionado] = useState(clienteVacio);
   const [lugarDeEntrega, setLugarDeEntrega] = useState("");
   const [diasDeCotizacion, setDiasDeCotizacion] = useState(1);
+  const [suministroMaterial, setSuministroMaterial] = useState("");
+  const [peticionAnticipo, setPeticionAnticipo] = useState(0);
 
   const [valorCliente, setValorCliente] = useState("");
   const [valorProducto, setValorProducto] = useState("");
@@ -159,7 +162,7 @@ export default function Cotizaciones() {
         setValorProducto("");
       } else {
         modals.open({
-          title: "Crear nuevo producto",
+          title: "Crear nuevo productoz",
           children: (
             <CrearActualizarProducto
               crearProducto={true}
@@ -348,6 +351,8 @@ export default function Cotizaciones() {
           diasCotizacion: diasDeCotizacion,
           clienteId: clienteSeleccionado.id,
           lugarDeEntrega: lugarDeEntrega,
+          suministroMaterial: suministroMaterial,
+          porcentajeAnticipo: peticionAnticipo,
         };
         toggleLoader();
         Cotizacion.crearCotizacion(bodyCotizacion)
@@ -403,6 +408,8 @@ export default function Cotizaciones() {
           )}
           <Title>Cotización</Title>
         </Flex>
+        {/*Datos Generales*/}
+        <Divider my="xs" label="Informacion General" labelPosition="left" />
         <Flex gap="md" align="center">
           <Text size="h2">
             <Text span fw={700} inherit>
@@ -437,8 +444,36 @@ export default function Cotizaciones() {
           )}
         </Flex>
 
+        <Flex gap="md" align="center">
+          <Text span fw={700} inherit>
+            Suministro de Material:
+          </Text>
+          <Select
+            placeholder="Selecciona Fecha Estimada"
+            onChange={(value) => setSuministroMaterial(value)}
+            data={[
+              "Entrega Inmediata",
+              "1 Semana de Entrega",
+              "2 Semanas de Entrega",
+              "1 Mes de Entrega",
+            ]}
+          />
+        </Flex>
+        <Flex gap="md" align="center">
+          <Text span fw={700} inherit>
+            Peticion de Anticipo:
+          </Text>
+          <NumberInput
+            onChange={(value) => setPeticionAnticipo(value)}
+            step={10}
+            min={0}
+            max={50}
+            suffix=" %"
+            defaultValue={0}
+          />
+        </Flex>
         {/*Datos del cliente*/}
-        <Divider my="xs" label="Datos del cliente" labelPosition="left" />
+        <Divider my="xs" label="Datos del Cliente" labelPosition="left" />
         <Flex gap="xs" align="center">
           <Text>
             <Text span fw={700} inherit>

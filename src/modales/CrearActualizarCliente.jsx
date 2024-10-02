@@ -21,9 +21,6 @@ export default function CrearActualizarCliente({
     validate: {
       correo: (value) => (/^\S+@\S+$/.test(value) ? null : "Correo invalido"),
       nombre: (value) => (value === "" ? "Ingresa el nombre" : null),
-      telefono: (value) => (value === "" ? "Ingresa número de teléfono" : null),
-      telefono: (value) =>
-        value.length < 14 ? "Ingrese completo el número de teléfono" : null,
       domicilio: (value) => (value === "" ? "Ingresa un domicilio" : null),
     },
   });
